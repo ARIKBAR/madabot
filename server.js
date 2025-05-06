@@ -1,56 +1,59 @@
 const express = require('express');
 const { Client, LocalAuth } = require('whatsapp-web.js');
-const qrcode = require('qrcode-terminal');
+const QRCode = require('qrcode');
 const bodyParser = require('body-parser');
+const fs = require('fs');
 
 const app = express();
 const port = process.env.PORT || 3000;
 
+// group chat ID to send messages to:
+const chatId = '120363419703663919@g.us';
+
 app.use(bodyParser.text());
 
-let chatId = null;
-
+// initialize WhatsApp client
 const client = new Client({
-    authStrategy: new LocalAuth({ clientId: "main" }),
-    puppeteer: {
-        args: ['--no-sandbox', '--disable-setuid-sandbox']
-    }
+  authStrategy: new LocalAuth({ clientId: 'main' }),
+  puppeteer: {
+    args: ['--no-sandbox', '--disable-setuid-sandbox']
+  }
 });
 
-client.on('qr', qr => {
-    console.log('Scan this QR code to log in:');
-    qrcode.generate(qr, { small: true });
+// QR code generation
+client.on('qr', async (qr) => {
+  console.log('Generating QR code...');
+  try {
+    await QRCode.toFile('./qr.png', qr);
+    console.log('✅ QR code saved to qr.png');
+  } catch (err) {
+    console.error('❌ Failed to generate QR code:', err);
+  }
 });
 
 client.on('ready', () => {
-    console.log('✅ WhatsApp client is ready!');
-});
-
-client.on('message', async msg => {
-    if (msg.body === '!set') {
-        chatId = msg.from;
-        await msg.reply("✅ Chat ID saved. All alerts will be sent here.");
-    }
+  console.log('✅ WhatsApp client is ready!');
 });
 
 app.post('/api/notify', async (req, res) => {
-    const message = req.body;
+  const message = req.body;
 
-    if (!chatId) {
-        return res.status(400).send("❌ Chat ID not set. Send '!set' to the bot first.");
-    }
+  if (!message) {
+    return res.status(400).send("❌ No message content.");
+  }
 
-    try {
-        await client.sendMessage(chatId, message);
-        res.send("✅ Message sent.");
-    } catch (error) {
-        console.error(error);
-        res.status(500).send("❌ Failed to send message.");
-    }
+  try {
+    await client.sendMessage(chatId, message);
+    console.log(`📤 Message sent: ${message}`);
+    res.send("✅ Message sent to WhatsApp group.");
+  } catch (error) {
+    console.error("❌ Error sending message:", error);
+    res.status(500).send("❌ Failed to send message.");
+  }
 });
 
 client.initialize();
 
 app.listen(port, () => {
-    console.log(`🚀 Server running on port ${port}`);
+  console.log(`🚀 Server running on port ${port}`);
 });
